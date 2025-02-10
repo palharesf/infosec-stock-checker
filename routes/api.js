@@ -7,12 +7,11 @@
 "use strict";
 
 const request = require("request");
-
 const crypto = require("crypto");
 
-const ipHash = (ip) => crypto.createHash("sha256").update(ip).digest("hex");
-
 const likeDB = new Map();
+
+const ipHash = (ip) => crypto.createHash("sha256").update(ip).digest("hex");
 
 function addLike(hashedIp, stock) {
   if (!likeDB.has(stock)) {
@@ -25,23 +24,23 @@ function getLikeCount(stock) {
   return likeDB.get(stock) ? likeDB.get(stock).size : 0;
 }
 
-let stock1 = "";
-let stock2 = "";
-let like_flag = false;
-let url1 = "";
-let url2 = "";
-let singleStock = true;
-let stockData = {};
-let stockData1 = {};
-let stockData2 = {};
-let options1 = {};
-let options2 = {};
-let ip = "";
-let hashedIp = "";
-let rel_likes = 0;
-
 module.exports = function (app) {
   app.route("/api/stock-prices").get(async function (req, res) {
+
+    let stock1 = "";
+    let stock2 = "";
+    let like_flag = false;
+    let url1 = "";
+    let url2 = "";
+    let singleStock = true;
+    let stockData = {};
+    let stockData1 = {};
+    let stockData2 = {};
+    let options1 = {};
+    let options2 = {};
+    let ip = "";
+    let hashedIp = "";
+    let rel_likes = 0;
 
     // IP Masking
     ip =
@@ -69,11 +68,9 @@ module.exports = function (app) {
       }
     } else if (like_flag === "true" && !singleStock) {
       if (getLikeCount(stock1) === 0 || !likeDB.get(stock1).has(hashedIp)) {
-        console.log("Adding stock 1 of 2");
         addLike(hashedIp, stock1);
       }
       if (getLikeCount(stock2) === 0 || !likeDB.get(stock2).has(hashedIp)) {
-        console.log("Adding stock 2 of 2");
         addLike(hashedIp, stock2);
       }
     } 
@@ -99,7 +96,7 @@ module.exports = function (app) {
       .catch((error) => {
         res.send(error);
       });
-
+    
     if (!singleStock) {
       options2 = {
         url: url2,
@@ -129,10 +126,11 @@ module.exports = function (app) {
       rel_likes = stockData1.likes - stockData2.likes;
       delete stockData1.likes;
       delete stockData2.likes;
-      stockData1.rel_likes = rel_likes;
-      stockData2.rel_likes = -rel_likes;
+      stockData1.rel_likes = parseInt(rel_likes);
+      stockData2.rel_likes = parseInt(-rel_likes);
     }
 
+    console.log (stockData);
     res.json({ stockData });
   });
 };
