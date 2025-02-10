@@ -8,20 +8,47 @@
 
 const request = require("request");
 
+const crypto = require("crypto");
+
+const ipHash = (ip) => crypto.createHash("sha256").update(ip).digest("hex");
+
+const likeDB = new Map();
+
+function addLike(hashedIp, stock) {
+  if (!likeDB.has(stock)) {
+    likeDB.set(stock, new Set());
+  }
+  likeDB.get(stock).add(hashedIp);
+}
+
+function getLikeCount(stock) {
+  return likeDB.get(stock) ? likeDB.get(stock).size : 0;
+}
+
 let stock1 = "";
 let stock2 = "";
 let like_flag = false;
 let url1 = "";
 let url2 = "";
 let singleStock = true;
+let stockData = {};
 let stockData1 = {};
 let stockData2 = {};
 let options1 = {};
 let options2 = {};
+let ip = "";
+let hashedIp = "";
+let rel_likes = 0;
 
 module.exports = function (app) {
   app.route("/api/stock-prices").get(async function (req, res) {
 
+    // IP Masking
+    ip =
+      req.ip || req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+    hashedIp = await ipHash(ip);
+
+    // Handler for single stock request or multi-stock comparison
     if (Array.isArray(req.query.stock)) {
       singleStock = false;
       stock1 = req.query.stock[0];
@@ -35,12 +62,27 @@ module.exports = function (app) {
 
     like_flag = req.query.like;
 
+    // Handler for likes
+    if (like_flag === "true" && singleStock) {
+      if (getLikeCount(stock1) === 0 || !likeDB.get(stock1).has(hashedIp)) {
+        addLike(hashedIp, stock1);
+      }
+    } else if (like_flag === "true" && !singleStock) {
+      if (getLikeCount(stock1) === 0 || !likeDB.get(stock1).has(hashedIp)) {
+        console.log("Adding stock 1 of 2");
+        addLike(hashedIp, stock1);
+      }
+      if (getLikeCount(stock2) === 0 || !likeDB.get(stock2).has(hashedIp)) {
+        console.log("Adding stock 2 of 2");
+        addLike(hashedIp, stock2);
+      }
+    } 
+
+    // Setup for requests
     options1 = {
-        url: url1,
-        json: true,
+      url: url1,
+      json: true,
     };
-    
-    console.log("Options1: ", options1);
 
     await new Promise((resolve, reject) => {
       request(options1, function (error, response, body) {
@@ -50,12 +92,13 @@ module.exports = function (app) {
           resolve(body);
         }
       });
-    }).then((body) => {
-      stockData1 = { stock: stock1, price: body.close, likes: "TBD" };
-      console.log("StockData1: ", stockData1);
-    }).catch((error) => {
-      res.send(error);
     })
+      .then((body) => {
+        stockData1 = { stock: stock1, price: body.close, likes: getLikeCount(stock1) };
+      })
+      .catch((error) => {
+        res.send(error);
+      });
 
     if (!singleStock) {
       options2 = {
@@ -73,24 +116,23 @@ module.exports = function (app) {
         });
       })
         .then((body) => {
-          stockData2 = { stock: stock2, price: body.close, likes: "TBD" };
-          console.log("StockData2: ", stockData2);
+          stockData2 = { stock: stock2, price: body.close, likes: getLikeCount(stock2) };
         })
         .catch((error) => {
           res.send(error);
         });
     }
 
-    console.log("After requests...");
-    console.log("Stock1: " + stock1);
-    console.log("Stock2: " + stock2);
-    console.log("Like_flag: " + like_flag);
-    console.log("URL1: " + url1);
-    console.log("URL2: " + url2);
-    console.log("SingleStock: " + singleStock);
-    console.log("StockData1: ", stockData1);
-    console.log("StockData2: ", stockData2);
+    stockData = singleStock ? stockData1 : [stockData1, stockData2];
 
-    res.json({ stockData: singleStock ? stockData1 : [stockData1, stockData2] });
+    if (!singleStock) {
+      rel_likes = stockData1.likes - stockData2.likes;
+      delete stockData1.likes;
+      delete stockData2.likes;
+      stockData1.rel_likes = rel_likes;
+      stockData2.rel_likes = -rel_likes;
+    }
+
+    res.json({ stockData });
   });
 };
