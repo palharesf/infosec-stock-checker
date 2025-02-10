@@ -13,8 +13,8 @@
 		"dotenv": "^8.2.0",
 		"express": "^4.14.0",
 		"helmet": "^3.1.0",
-		"mocha": "^11.1.0",
-		"request": "^2.88.2"
+		"ky": "^1.7.4",
+		"mocha": "^11.1.0"
 	},
 	"repository": {
 		"type": "git",
